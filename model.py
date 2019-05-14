@@ -8,7 +8,7 @@ import tensorflow as tf
 
 
 class Encoder(tf.keras.Model):
-    def __init__(self, input_size, batch_size, hidden_size, embedding_dim, gru_units):
+    def __init__(self, input_size, batch_size, hidden_size, embedding_dim, enc_units):
         # some what different as compared to torch model
         super(Encoder, self).__init__()
         self.batch_size = batch_size
@@ -17,10 +17,10 @@ class Encoder(tf.keras.Model):
         # embedding dimension
         self.embedding = tf.keras.layers.Embedding(input_size, embedding_dim)
         # units for gru
-        self.gru_units = gru_units
+        self.enc_units = enc_units
         # defing gru layer
         self.gru = tf.keras.layers.GRU(
-            self.gru_units, return_sequences=True, return_state=True, recurrent_initializer="glorot_uniform")
+            self.enc_units, return_sequences=True, return_state=True, recurrent_initializer="glorot_uniform")
 
     # on calling
     def call(self, x, hidden):
@@ -33,6 +33,34 @@ class Encoder(tf.keras.Model):
     # function for initial state initialization
 
     def initialize_hidden_state(self):
-        return tf.zeros((self.batch_size, self.gru_units))
+        return tf.zeros((self.batch_size, self.enc_units))
 
 # Attention Layer in Between
+# Calculating attention weights and then context vector and finally attention vector
+
+
+class Attention(tf.keras.Model):
+    def __init__(self, units):
+        super(Attention, self).__init__()
+        # small nueral network to predict the intermediate vector e for the attention mechanism
+        self.W1 = tf.keras.layers.Dense(units)
+        self.W2 = tf.keras.layers.Dense(units)
+        self.V = tf.keras.layers.Dense(1)
+
+    def call(self, query, values):
+        # hidden step we use to decide the the input to the small nueral network
+        hidden_state_att = tf.expand_dims(query, 1)
+        # this is done for the manipulation of the input to the nureal network so that proper dimension can be maintained
+        # e = FC(tanh(FC(Encodero/p)+FC(Decoder Hidden State)))
+        # basic nureal network arch
+        # values is the encoder o/p
+        e = self.V(tf.nn.tanh(self.W1(values)+self.W2(hidden_state_att)))
+        # attention weights
+        # softmax to the score
+        att_weights = tf.nn.softmax(e, axis=1)
+        # context vector i.e weighted sum
+        cont_vec = att_weights*values
+        # multiplication with the matrix vectorization
+        cont_vec = tf.reduce_sum(cont_vec, axis=1)
+        # after mutliplication we need to sum all of them using the first axis
+        return cont_vec, att_weights
