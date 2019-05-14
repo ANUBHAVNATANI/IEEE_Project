@@ -64,3 +64,31 @@ class Attention(tf.keras.Model):
         cont_vec = tf.reduce_sum(cont_vec, axis=1)
         # after mutliplication we need to sum all of them using the first axis
         return cont_vec, att_weights
+
+
+class Decoder(tf.keras.Model):
+    def __init__(self, input_size, embedding_dim, dec_units, batch_size):
+        super(Decoder, self).__init__()
+        self.batch_size = batch_size
+        self.dec_units = dec_units
+        self.embedding = tf.keras.layers.Embedding(input_size, embedding_dim)
+        self.gru = tf.keras.layers.GRU(
+            self.dec_units, return_sequences=True, return_state=True, recurrent_initializer="glorot_uniform")
+        self.fc = tf.keras.layers.Dense(input_size)
+        # initializing the attention layer
+        self.attn = Attention(self.dec_units)
+
+    def call(self, x, hidden, enc_op):
+        # run on the encoder output
+        cont_vec, att_wgt = self.attn(hidden, enc_op)
+        x = self.embedding(x)
+        x = tf.concat([tf.expand_dims(cont_vec, 1), x], axis=-1)
+        # both attention and embedded input goes in the gru input
+        out, state = self.gru(x)
+        # output shape change
+        out = tf.reshape(out, (-1, out.shape[2]))
+        # passing this output to the fully connected layer
+        x = self.fc(out)
+
+        # state pass for the next state and attention weights for the next state
+        return x, state, att_wgt
